@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Editor from '@monaco-editor/react';
-import { Play, RotateCcw, Save, ArrowLeft } from 'lucide-react';
+import { Play, RotateCcw, Save, ArrowLeft, X, TerminalSquare } from 'lucide-react';
 import Link from 'next/link';
 
 const LANGUAGES = [
@@ -26,6 +26,33 @@ export function EditorClient() {
   const [isRunning, setIsRunning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [loadingFile, setLoadingFile] = useState(!!openedFile);
+
+  const [isTerminalOpen, setIsTerminalOpen] = useState(true);
+  const [terminalHeight, setTerminalHeight] = useState(250);
+  const [isDragging, setIsDragging] = useState(false);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging) return;
+      setTerminalHeight(prev => {
+        const newHeight = prev - e.movementY;
+        return Math.max(50, Math.min(newHeight, 800)); // constraints
+      });
+    };
+    const handleMouseUp = () => setIsDragging(false);
+    
+    if (isDragging) {
+      document.body.style.userSelect = 'none'; // Prevent text selection while dragging
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    } else {
+      document.body.style.userSelect = '';
+    }
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
 
   useEffect(() => {
     if (openedFile) {
@@ -67,6 +94,7 @@ export function EditorClient() {
 
   const handleRun = async () => {
     setIsRunning(true);
+    setIsTerminalOpen(true);
     setOutput('Compiling and running...');
 
     try {
@@ -169,16 +197,27 @@ export function EditorClient() {
             )}
           </div>
           
-          {openedFile && (
-            <button 
-              onClick={handleSaveFile}
-              disabled={isSaving}
-              className="btn-secondary"
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 12 }}
-            >
-              <Save size={14} /> {isSaving ? 'Saving...' : 'Save File'}
-            </button>
-          )}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {!isTerminalOpen && (
+              <button 
+                onClick={() => setIsTerminalOpen(true)}
+                className="btn-secondary"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 12 }}
+              >
+                <TerminalSquare size={14} /> Output
+              </button>
+            )}
+            {openedFile && (
+              <button 
+                onClick={handleSaveFile}
+                disabled={isSaving}
+                className="btn-secondary"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 12 }}
+              >
+                <Save size={14} /> {isSaving ? 'Saving...' : 'Save File'}
+              </button>
+            )}
+          </div>
         </div>
         <div className="editor-container">
           <Editor
@@ -194,12 +233,37 @@ export function EditorClient() {
             }}
           />
         </div>
-        <div className="terminal-container">
-          <div className="terminal-header">Output</div>
-          <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-            {output || 'Output will appear here...'}
-          </pre>
-        </div>
+        {isTerminalOpen && (
+          <>
+            <div 
+              onMouseDown={() => setIsDragging(true)}
+              style={{ 
+                height: '8px', 
+                cursor: 'ns-resize', 
+                backgroundColor: isDragging ? 'var(--accent-color)' : 'transparent',
+                transition: 'background-color 0.2s',
+                width: '100%',
+                borderTop: '1px solid var(--border-color)',
+                borderBottom: '1px solid var(--border-color)',
+                marginTop: '-1px'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--accent-color)'}
+              onMouseLeave={(e) => !isDragging && (e.currentTarget.style.backgroundColor = 'transparent')}
+              title="Drag to resize terminal"
+            />
+            <div className="terminal-container" style={{ height: `${terminalHeight}px`, borderTop: 'none' }}>
+              <div className="terminal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Output</span>
+                <button onClick={() => setIsTerminalOpen(false)} style={{ color: '#888', padding: '4px', cursor: 'pointer', display: 'flex' }} title="Close Output">
+                  <X size={16} />
+                </button>
+              </div>
+              <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                {output || 'Output will appear here...'}
+              </pre>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
