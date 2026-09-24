@@ -1,13 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-
-const isProd = process.env.NODE_ENV === 'production';
-const dataDir = isProd ? '/tmp/data/projects' : path.join(process.cwd(), 'data', 'projects');
-
-// Ensure base dir exists
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
+import { hasDb, query, initPostgresDb } from './db';
 
 export type FileNode = {
   name: string;
@@ -16,7 +9,71 @@ export type FileNode = {
   children?: FileNode[];
 };
 
-function buildFileTree(dir: string, basePath: string = ''): FileNode[] {
+const isProd = process.env.NODE_ENV === 'production';
+const dataDir = isProd ? '/tmp/data/projects' : path.join(process.cwd(), 'data', 'projects');
+
+async function initFilesDb() {
+  if (hasDb) {
+    await initPostgresDb();
+    return;
+  }
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+}
+
+// Convert flat DB paths to tree
+function buildTreeFromPaths(rows: any[]): FileNode[] {
+  const root: FileNode[] = [];
+
+  for (const row of rows) {
+    const parts = row.path.split('/');
+    let currentLevel = root;
+    
+    let builtPath = '';
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      builtPath = builtPath ? `${builtPath}/${part}` : part;
+      
+      let node = currentLevel.find(n => n.name === part);
+      
+      if (!node) {
+        // If it's the last part, it takes the row's actual type. Otherwise it's an implied folder.
+        const isLast = i === parts.length - 1;
+        const type = isLast ? row.type : 'folder';
+        
+        node = {
+          name: part,
+          type: type as 'file' | 'folder',
+          path: builtPath,
+          children: type === 'folder' ? [] : undefined
+        };
+        currentLevel.push(node);
+      }
+      
+      if (node.type === 'folder') {
+        if (!node.children) node.children = [];
+        currentLevel = node.children;
+      }
+    }
+  }
+
+  // Helper to sort recursively
+  const sortTree = (nodes: FileNode[]) => {
+    nodes.sort((a, b) => {
+      if (a.type === b.type) return a.name.localeCompare(b.name);
+      return a.type === 'folder' ? -1 : 1;
+    });
+    for (const node of nodes) {
+      if (node.children) sortTree(node.children);
+    }
+  };
+
+  sortTree(root);
+  return root;
+}
+
+function buildFileTreeSync(dir: string, basePath: string = ''): FileNode[] {
   if (!fs.existsSync(dir)) return [];
   
   const nodes: FileNode[] = [];
@@ -32,7 +89,7 @@ function buildFileTree(dir: string, basePath: string = ''): FileNode[] {
         name: item,
         type: 'folder',
         path: relPath,
-        children: buildFileTree(itemPath, relPath),
+        children: buildFileTreeSync(itemPath, relPath),
       });
     } else {
       nodes.push({
@@ -43,25 +100,39 @@ function buildFileTree(dir: string, basePath: string = ''): FileNode[] {
     }
   }
 
-  // Sort folders first, then files
   return nodes.sort((a, b) => {
     if (a.type === b.type) return a.name.localeCompare(b.name);
     return a.type === 'folder' ? -1 : 1;
   });
 }
 
-export function getUserFileSystem(userId: string): FileNode[] {
+export async function getUserFileSystem(userId: string): Promise<FileNode[]> {
+  await initFilesDb();
+
+  if (hasDb) {
+    const res = await query('SELECT path, type FROM files WHERE user_id = $1 ORDER BY path ASC', [userId]);
+    return buildTreeFromPaths(res.rows);
+  }
+
   const userDir = path.join(dataDir, userId);
   if (!fs.existsSync(userDir)) {
     fs.mkdirSync(userDir, { recursive: true });
   }
-  return buildFileTree(userDir);
+  return buildFileTreeSync(userDir);
 }
 
-export function createItem(userId: string, itemPath: string, type: 'file' | 'folder') {
+export async function createItem(userId: string, itemPath: string, type: 'file' | 'folder') {
+  await initFilesDb();
+
+  if (hasDb) {
+    await query(
+      'INSERT INTO files (user_id, path, type, content) VALUES ($1, $2, $3, $4) ON CONFLICT (user_id, path) DO NOTHING',
+      [userId, itemPath, type, '']
+    );
+    return;
+  }
+
   const fullPath = path.join(dataDir, userId, itemPath);
-  
-  // Prevent directory traversal
   if (!fullPath.startsWith(path.join(dataDir, userId))) {
     throw new Error('Invalid path');
   }
@@ -77,7 +148,17 @@ export function createItem(userId: string, itemPath: string, type: 'file' | 'fol
   }
 }
 
-export function saveFileContent(userId: string, itemPath: string, content: string) {
+export async function saveFileContent(userId: string, itemPath: string, content: string) {
+  await initFilesDb();
+
+  if (hasDb) {
+    await query(
+      'UPDATE files SET content = $1 WHERE user_id = $2 AND path = $3 AND type = $4',
+      [content, userId, itemPath, 'file']
+    );
+    return;
+  }
+
   const fullPath = path.join(dataDir, userId, itemPath);
   if (!fullPath.startsWith(path.join(dataDir, userId))) {
     throw new Error('Invalid path');
@@ -85,7 +166,15 @@ export function saveFileContent(userId: string, itemPath: string, content: strin
   fs.writeFileSync(fullPath, content);
 }
 
-export function getFileContent(userId: string, itemPath: string): string {
+export async function getFileContent(userId: string, itemPath: string): Promise<string> {
+  await initFilesDb();
+
+  if (hasDb) {
+    const res = await query('SELECT content FROM files WHERE user_id = $1 AND path = $2 AND type = $3', [userId, itemPath, 'file']);
+    if (res.rows.length === 0) return '';
+    return res.rows[0].content || '';
+  }
+
   const fullPath = path.join(dataDir, userId, itemPath);
   if (!fullPath.startsWith(path.join(dataDir, userId))) {
     throw new Error('Invalid path');

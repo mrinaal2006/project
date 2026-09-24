@@ -10,12 +10,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'Missing fields' }, { status: 400 });
     }
 
-    if (getUserById(id)) {
+    const existingUser = await getUserById(id);
+    if (existingUser) {
       return NextResponse.json({ message: 'User already exists' }, { status: 400 });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    addUser({ id, name, password: hashedPassword });
+    await addUser({ id, name, password: hashedPassword });
 
     return NextResponse.json({ message: 'User registered successfully' }, { status: 201 });
   } catch (error) {

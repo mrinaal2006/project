@@ -16,7 +16,7 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Please enter an ID and password');
         }
 
-        const user = getUserById(credentials.id);
+        const user = await getUserById(credentials.id);
         if (!user || !user.password) {
           throw new Error('No user found with this ID');
         }

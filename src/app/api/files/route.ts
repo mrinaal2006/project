@@ -15,11 +15,11 @@ export async function GET(req: Request) {
   try {
     if (getPath !== null) {
       // Get file content
-      const content = getFileContent((session.user as any).id, getPath);
+      const content = await getFileContent((session.user as any).id, getPath);
       return NextResponse.json({ content });
     } else {
       // Get file tree
-      const tree = getUserFileSystem((session.user as any).id);
+      const tree = await getUserFileSystem((session.user as any).id);
       return NextResponse.json({ tree });
     }
   } catch (error: any) {
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing path or type' }, { status: 400 });
     }
 
-    createItem((session.user as any).id, path, type);
+    await createItem((session.user as any).id, path, type);
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -58,7 +58,7 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'Missing path' }, { status: 400 });
     }
 
-    saveFileContent((session.user as any).id, path, content || '');
+    await saveFileContent((session.user as any).id, path, content || '');
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

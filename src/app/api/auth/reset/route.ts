@@ -10,13 +10,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'Missing fields' }, { status: 400 });
     }
 
-    const user = getUserById(id);
+    const user = await getUserById(id);
     if (!user) {
       return NextResponse.json({ message: 'User not found' }, { status: 404 });
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    updateUser(id, { password: hashedPassword });
+    await updateUser(id, { password: hashedPassword });
 
     return NextResponse.json({ message: 'Password reset successfully' }, { status: 200 });
   } catch (error) {
