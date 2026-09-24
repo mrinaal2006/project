@@ -213,6 +213,7 @@ export default function Dashboard() {
               </div>
               <Folder size={48} color="var(--primary-color)" style={{ marginBottom: '12px' }} />
               <span style={{ fontWeight: 600 }}>{node.name}</span>
+              {node.createdAt && <span style={{ fontSize: '11px', color: 'var(--accent-color)', marginTop: '8px' }}>{new Date(node.createdAt).toLocaleDateString()}</span>}
             </div>
           ) : (
             <Link 
@@ -228,6 +229,7 @@ export default function Dashboard() {
               </div>
               <FileIcon size={48} color="var(--accent-color)" style={{ marginBottom: '12px' }} />
               <span style={{ fontWeight: 600 }}>{node.name}</span>
+              {node.createdAt && <span style={{ fontSize: '11px', color: 'var(--accent-color)', marginTop: '8px' }}>{new Date(node.createdAt).toLocaleDateString()}</span>}
             </Link>
           )
         ))}

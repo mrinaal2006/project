@@ -7,6 +7,7 @@ export type FileNode = {
   type: 'file' | 'folder';
   path: string;
   children?: FileNode[];
+  createdAt?: string;
 };
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -46,7 +47,8 @@ function buildTreeFromPaths(rows: any[]): FileNode[] {
           name: part,
           type: type as 'file' | 'folder',
           path: builtPath,
-          children: type === 'folder' ? [] : undefined
+          children: type === 'folder' ? [] : undefined,
+          createdAt: isLast ? row.created_at : undefined,
         };
         currentLevel.push(node);
       }
@@ -90,12 +92,14 @@ function buildFileTreeSync(dir: string, basePath: string = ''): FileNode[] {
         type: 'folder',
         path: relPath,
         children: buildFileTreeSync(itemPath, relPath),
+        createdAt: stat.birthtime.toISOString(),
       });
     } else {
       nodes.push({
         name: item,
         type: 'file',
         path: relPath,
+        createdAt: stat.birthtime.toISOString(),
       });
     }
   }
@@ -110,7 +114,7 @@ export async function getUserFileSystem(userId: string): Promise<FileNode[]> {
   await initFilesDb();
 
   if (hasDb) {
-    const res = await query('SELECT path, type FROM files WHERE user_id = $1 ORDER BY path ASC', [userId]);
+    const res = await query('SELECT path, type, created_at FROM files WHERE user_id = $1 ORDER BY path ASC', [userId]);
     return buildTreeFromPaths(res.rows);
   }
 
