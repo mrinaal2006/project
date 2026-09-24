@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Folder, File as FileIcon, Plus, FolderPlus, FilePlus, ChevronRight } from 'lucide-react';
+import { Folder, File as FileIcon, Plus, FolderPlus, FilePlus, ChevronRight, Trash2, Copy } from 'lucide-react';
 import { FileNode } from '@/lib/files';
 
 export default function Dashboard() {
@@ -55,7 +55,49 @@ export default function Dashboard() {
         setShowCreateModal(null);
         setNewItemName('');
         fetchFiles();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to create item');
       }
+    } catch (err) {
+      console.error(err);
+      alert('Network error');
+    }
+  };
+
+  const handleDeleteItem = async (e: React.MouseEvent, path: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm(`Are you sure you want to delete ${path}?`)) return;
+    
+    try {
+      const res = await fetch('/api/files', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      });
+      if (res.ok) fetchFiles();
+      else alert('Failed to delete');
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleCopyItem = async (e: React.MouseEvent, path: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const newName = prompt(`Enter new name for copy of ${path}:`, `${path}-copy`);
+    if (!newName) return;
+
+    try {
+      const res = await fetch('/api/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'copy', source: path, path: newName }),
+      });
+      if (res.ok) fetchFiles();
+      else alert('Failed to copy');
     } catch (err) {
       console.error(err);
     }
@@ -162,10 +204,13 @@ export default function Dashboard() {
             <div 
               key={node.path}
               onClick={() => setCurrentPath(node.path)}
-              style={{ padding: '20px', border: '1px solid var(--border-color)', borderRadius: '8px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backgroundColor: 'var(--secondary-color)', transition: 'transform 0.2s, box-shadow 0.2s' }}
+              style={{ position: 'relative', padding: '20px', border: '1px solid var(--border-color)', borderRadius: '8px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backgroundColor: 'var(--secondary-color)', transition: 'transform 0.2s, box-shadow 0.2s' }}
               onMouseOver={(e) => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)'}
               onMouseOut={(e) => e.currentTarget.style.boxShadow = 'none'}
             >
+              <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4 }}>
+                <button onClick={(e) => handleDeleteItem(e, node.path)} style={{ color: 'var(--error-color)' }}><Trash2 size={16} /></button>
+              </div>
               <Folder size={48} color="var(--primary-color)" style={{ marginBottom: '12px' }} />
               <span style={{ fontWeight: 600 }}>{node.name}</span>
             </div>
@@ -173,10 +218,14 @@ export default function Dashboard() {
             <Link 
               href={`/editor?file=${encodeURIComponent(node.path)}`}
               key={node.path}
-              style={{ padding: '20px', border: '1px solid var(--border-color)', borderRadius: '8px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backgroundColor: 'var(--bg-color)', transition: 'transform 0.2s, box-shadow 0.2s', textDecoration: 'none', color: 'inherit' }}
+              style={{ position: 'relative', padding: '20px', border: '1px solid var(--border-color)', borderRadius: '8px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backgroundColor: 'var(--bg-color)', transition: 'transform 0.2s, box-shadow 0.2s', textDecoration: 'none', color: 'inherit' }}
               onMouseOver={(e) => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)'}
               onMouseOut={(e) => e.currentTarget.style.boxShadow = 'none'}
             >
+              <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4 }}>
+                <button onClick={(e) => handleCopyItem(e, node.path)} style={{ color: 'var(--accent-color)' }}><Copy size={16} /></button>
+                <button onClick={(e) => handleDeleteItem(e, node.path)} style={{ color: 'var(--error-color)' }}><Trash2 size={16} /></button>
+              </div>
               <FileIcon size={48} color="var(--accent-color)" style={{ marginBottom: '12px' }} />
               <span style={{ fontWeight: 600 }}>{node.name}</span>
             </Link>

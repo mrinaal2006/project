@@ -184,3 +184,53 @@ export async function getFileContent(userId: string, itemPath: string): Promise<
   }
   return fs.readFileSync(fullPath, 'utf8');
 }
+
+export async function deleteItem(userId: string, itemPath: string) {
+  await initFilesDb();
+
+  if (hasDb) {
+    // Delete exact match and any children (if folder)
+    await query('DELETE FROM files WHERE user_id = $1 AND (path = $2 OR path LIKE $3)', [userId, itemPath, `${itemPath}/%`]);
+    return;
+  }
+
+  const fullPath = path.join(dataDir, userId, itemPath);
+  if (!fullPath.startsWith(path.join(dataDir, userId))) {
+    throw new Error('Invalid path');
+  }
+  if (fs.existsSync(fullPath)) {
+    fs.rmSync(fullPath, { recursive: true, force: true });
+  }
+}
+
+export async function copyItem(userId: string, sourcePath: string, destPath: string) {
+  await initFilesDb();
+
+  if (hasDb) {
+    // A bit tricky in SQL to copy trees, for now copy a single file
+    const res = await query('SELECT type, content FROM files WHERE user_id = $1 AND path = $2', [userId, sourcePath]);
+    if (res.rows.length === 0) throw new Error('Source not found');
+    const { type, content } = res.rows[0];
+    await query(
+      'INSERT INTO files (user_id, path, type, content) VALUES ($1, $2, $3, $4) ON CONFLICT (user_id, path) DO NOTHING',
+      [userId, destPath, type, content]
+    );
+    return;
+  }
+
+  const fullSrc = path.join(dataDir, userId, sourcePath);
+  const fullDest = path.join(dataDir, userId, destPath);
+
+  if (!fullSrc.startsWith(path.join(dataDir, userId)) || !fullDest.startsWith(path.join(dataDir, userId))) {
+    throw new Error('Invalid path');
+  }
+
+  if (!fs.existsSync(fullSrc)) {
+    throw new Error('Source not found');
+  }
+  if (fs.existsSync(fullDest)) {
+    throw new Error('Destination already exists');
+  }
+
+  fs.cpSync(fullSrc, fullDest, { recursive: true });
+}
